@@ -1,0 +1,210 @@
+<html>
+  <head>
+    <script src="https://aframe.io/releases/0.6.1/aframe.min.js"></script>
+    <script src="https://cdn.rawgit.com/donmccurdy/aframe-extras/v3.9.0/dist/aframe-extras.min.js"></script>
+<!--      
+    <script src="https://unpkg.com/aframe-motion-capture-components/dist/aframe-motion-capture-components.min.js"></script>
+    <script src="https://unpkg.com/super-hands@1.0.1/dist/super-hands.min.js"></script>
+    <script src="https://unpkg.com/aframe-cubemap-component@0.1.2/dist/aframe-cubemap-component.min.js"></script>
+-->
+<!--
+    <script src="https://rawgit.com/chenzlabs/networked-aframe/toward-0.3.0/dist/networked-aframe.js"></script>
+-->
+    <script src="dev/build.js"></script>
+<!-- -->
+<!-- 
+    Currently, networked-aframe uses EasyRTC, which uses socket.io.
+    This stack appears to impose some early scaling constraints (~700 users max?)
+-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.4.5/socket.io.min.js"></script>
+    <!-- script src="https://rawgit.com/priologic/easyrtc/master/api/easyrtc.js"></script -->
+    <script src="easyrtc/easyrtc.js"></script>
+      
+    <script src="https://unpkg.com/aframe-randomizer-components@^3.0.1/dist/aframe-randomizer-components.min.js"></script>
+    <script src="js/spawn-in-circle.component.js"></script>
+  </head>
+  <body>
+    <script>
+      AFRAME.registerComponent("sync-model-position", {
+        schema: {
+          head: {type: 'string', default: '.hmd'},
+          leftHand: {type: 'string', default: '.left-hand'},
+          rightHand: {type: 'string', default: '.right-hand'},
+          headBone: {default: 2},
+          leftBone: {default: 5},
+          rightBone: {default: 8},
+        },
+        
+        modelParent: function () { return this.el.parentElement; },
+
+        update: function (oldData) {
+          this.head = this.modelParent().querySelector(this.data.head);
+          this.leftHand = this.modelParent().querySelector(this.data.leftHand);
+          this.rightHand = this.modelParent().querySelector(this.data.rightHand);
+        },
+
+        rememberModel: function () {
+          if (!this.model) {
+            var jsonModel = this.el.components['json-model'];
+            if (!jsonModel) { return; }
+            this.model = jsonModel.model;
+          }
+          return this.model;
+        },
+
+        rememberBones: function () {
+          if (!this.bones) {
+            if (!this.model || !this.model.geometry) { return; }
+            this.bones = this.model.skeleton.bones;
+          }
+          return this.bones;            
+        },
+          
+        tick: function (t, dt) {
+          var bone, obj;
+            
+          if (!this.rememberModel()) { return; }  
+          if (!this.rememberBones()) { return; }  
+
+          if (!this.head) this.head = this.modelParent().querySelector(this.data.head);
+          if (!this.leftHand) this.leftHand = this.modelParent().querySelector(this.data.leftHand);
+          if (!this.rightHand) this.rightHand = this.modelParent().querySelector(this.data.rightHand);
+
+          bone = this.bones[this.data.headBone];
+          obj = this.head;
+          if (obj) {
+            bone.position.copy(obj.object3D.position);
+            //bone.quaternion.copy(obj.object3D.quaternion);
+          }
+          
+          bone = this.bones[this.data.leftBone];
+          obj = this.leftHand;
+          if (obj) {
+            bone.position.copy(obj.object3D.position);
+            //bone.quaternion.copy(obj.object3D.quaternion);
+          } 
+          
+          bone = this.bones[this.data.rightBone];
+          obj = this.rightHand;
+          if (obj) {
+            bone.position.copy(obj.object3D.position);
+            //bone.quaternion.copy(obj.object3D.quaternion);
+          }
+        }
+      });
+    </script>
+    
+    <script id="avatar-template" type="text/html">        
+      <a-entity class="avatar">
+        <a-entity class="model" 
+          sync-model-position 
+          unsynced-position="0 0.8 0"
+          json-model="src: https://ucarecdn.com/9e0bcdac-01d8-476f-a459-00ea7f2ff9c8/">
+        </a-entity>
+        <a-cylinder class="stick"
+          position="0 0.8 0" height="1.6" radius="0.125" 
+          color="blue">
+        </a-cylinder>
+        <a-entity class="hmd">
+          <a-sphere position="-0.05 0.1 -0.1" scale="0.02 0.02 0.02" color="black"></a-sphere>
+          <a-sphere position="0.05 0.1 -0.1" scale="0.02 0.02 0.02" color="black"></a-sphere>
+          <a-cone rotation="-90 0 0" open-ended="true" 
+            position="0 0 -0.15" scale="0.1 0.3 0.2" color="white">
+          </a-cone>
+        </a-entity>
+        <a-entity class="left-hand" 
+          position="-0.5 1 -0.15">
+          <a-cone rotation="-90 0 0" side="double" 
+            open-ended="true" theta-start="-180" theta-length="180" 
+            position="0 0 -0.15" scale="0.1 0.3 0.2" color="#88F">
+          </a-cone>
+        </a-entity>
+        <a-entity class="right-hand" 
+          position="0.5 1 -0.15">
+          <a-cone rotation="-90 0 0" side="double" 
+            open-ended="true" theta-start="0" theta-length="180" 
+            position="0 0 -0.15" scale="0.1 0.3 0.2" color="#88F">
+          </a-cone>
+        </a-entity>
+      </a-entity>      
+    </script>    
+    <script>        
+      // Define custom schema for syncing avatar
+      var avatarSchema = {
+        template: '#avatar-template',
+        components: [
+          'position',
+          'rotation',
+
+          {selector: '.hmd', component: 'position'},
+          {selector: '.left-hand', component: 'position' },
+          {selector: '.right-hand', component: 'position' },
+          
+          {selector: '.hmd', component: 'rotation'},
+          {selector: '.left-hand', component: 'rotation'},
+          {selector: '.right-hand', component: 'rotation'},          
+        ]
+      };
+      NAF.schemas.add(avatarSchema);
+    </script>
+    
+    <script>
+      AFRAME.registerComponent("fix-player-template", {
+        init: function () {
+          var self = this;
+          this.el.addEventListener('templaterendered', function () {                      
+            // don't do this, or rotation will impact hmd and hands! 
+            // self.el.setAttribute('look-controls', '');
+            
+            // use HMD camera and look-controls for in-VR
+            self.el.querySelector('.hmd').setAttribute('look-controls', '');
+            self.el.querySelector('.hmd').setAttribute('camera', {active:true, userHeight: 1.6});
+            
+            // attach hand-controls
+            self.el.querySelector('.left-hand').setAttribute('hand-controls', 'left');
+            self.el.querySelector('.right-hand').setAttribute('hand-controls', 'right');
+
+            // remove our player model so it doesn't occlude our vision
+            self.el.querySelector('.model').removeAttribute('sync-model-position');
+            self.el.querySelector('.model').removeAttribute('json-model');
+          });
+
+          // FIXME: player should really move in the direction the HMD is facing
+          this.el.setAttribute('wasd-controls', '');
+
+          // FIXME: networked-share doesn't share without delay, but networked does;
+          //        race condition? both parties need to be connected by then?
+//          setTimeout(function () {
+//              self.el.setAttribute('networked-share', {
+              self.el.setAttribute('networked', {
+                  showLocalTemplate: true,
+                  template: avatarSchema.template,
+                  components: avatarSchema.components,
+//                  physics: true,
+              });
+//          }, 3000);
+
+        }
+      });
+    </script>
+        
+    <a-scene
+      not-physics="debug: true" 
+      networked-scene="debug: true;
+        room: basic;
+        useLerp: true; compressSyncPackets: true; useShare: true;
+        updateRate: 30;
+        collisionOwnership: false;
+        webrtc: true;
+   ">        
+      <a-sky color="#3CF"></a-sky>
+       
+      <a-entity fix-player-template spawn-in-circle="radius:3">
+      </a-entity>
+
+      <!-- Default camera, to be replaced with player hmd camera once template rendered -->
+      <a-camera wasd-controls="enabled:false"></a-camera>
+    </a-scene>
+      
+  </body>
+</html>
