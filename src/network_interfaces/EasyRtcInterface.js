@@ -67,13 +67,31 @@ class EasyRtcInterface extends NetworkInterface {
     var that = this;
 
     this.easyrtc.setStreamAcceptor(function(easyrtcid, stream) {
+      var sceneEl = document.querySelector('a-scene');
       var audioEl = document.createElement("audio");
       audioEl.setAttribute('id', 'audio-' + easyrtcid);
-      document.body.appendChild(audioEl);
+      sceneEl.appendChild(audioEl);
       that.easyrtc.setVideoObjectSrc(audioEl,stream);
+      var positionalAudioEl = document.createElement('a-sound');
+      positionalAudioEl.setAttribute('id', 'sound-' + easyrtcid);
+      sceneEl.appendChild(positionalAudioEl);
+      // Bind the positional audio source as soon as possible
+      // (to avoid errors where element has already been connected...)
+      //
+      positionalAudioEl.addEventListener('loaded', function () {
+        var sound = positionalAudioEl.components.sound;
+        sound.setupSound();
+        for (var i=0; i<sound.pool.children.length; i++) {
+          var poolSound = sound.pool.children[i];
+          poolSound.source = sound.listener.context.createMediaElementSource(audioEl);
+          poolSound.setNodeSource(poolSound.source);
+        }
+      });
     });
 
     this.easyrtc.setOnStreamClosed(function (easyrtcid) {
+      var positionalAudioEl = document.getElementById('sound-' + easyrtcid);
+      positionalAudioEl.parentNode.removeChild(positionalAudioEl);
       var audioEl = document.getElementById('audio-' + easyrtcid);
       audioEl.parentNode.removeChild(audioEl);
     });
