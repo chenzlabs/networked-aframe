@@ -5,6 +5,7 @@ var options = {
   useLerp: true, // when networked entities are created the aframe-lerp-component is attached to the root
   useShare: true, // whether for remote entities, we use networked-share (instead of networked-remote)
   collisionOwnership: true, // whether for networked-share, we take ownership when needed upon physics collision
+  autoplayAudio: true, // whether for remote streamed audio, we autoplay
 };
 
 module.exports = options;

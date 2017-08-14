@@ -35,7 +35,8 @@ class NetworkConnection {
     var streamOptions = {
       audio: enableAudio,
       video: false,
-      datachannel: true
+      datachannel: true,
+      autoplayAudio: NAF.options.autoplayAudio
     };
     this.network.setStreamOptions(streamOptions);
     this.network.setDatachannelListeners(

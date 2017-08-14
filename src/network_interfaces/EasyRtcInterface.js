@@ -31,6 +31,7 @@ class EasyRtcInterface extends NetworkInterface {
     this.easyrtc.enableAudio(options.audio);
     this.easyrtc.enableVideoReceive(false);
     this.easyrtc.enableAudioReceive(options.audio);
+    this.autoplayAudio = options.autoplayAudio;
   }
 
   setDatachannelListeners(openListener, closedListener, messageListener) {
@@ -68,24 +69,34 @@ class EasyRtcInterface extends NetworkInterface {
 
     this.easyrtc.setStreamAcceptor(function(easyrtcid, stream) {
       var sceneEl = document.querySelector('a-scene');
-      var audioEl = document.createElement("audio");
-      audioEl.setAttribute('id', 'audio-' + easyrtcid);
-      sceneEl.appendChild(audioEl);
-      that.easyrtc.setVideoObjectSrc(audioEl,stream);
-      var positionalAudioEl = document.createElement('a-sound');
+      var positionalAudioEl = sceneEl.querySelector('#sound-' + easyrtcid);
+      if (positionalAudioEl) {
+        console.warn('??? We already have #sound-' + easyrtcid);
+	return;
+      }
+      positionalAudioEl = document.createElement('a-sound');
       positionalAudioEl.setAttribute('id', 'sound-' + easyrtcid);
       sceneEl.appendChild(positionalAudioEl);
-      // Bind the positional audio source as soon as possible
-      // (to avoid errors where element has already been connected...)
-      //
       positionalAudioEl.addEventListener('loaded', function () {
+        var audioEl = sceneEl.querySelector('#audio-' + easyrtcid);
+        if (audioEl) {
+          console.warn('??? We already have #audio-' + easyrtcid);
+	  return;
+        }
+	audioEl = document.createElement("audio");
+        audioEl.setAttribute('id', 'audio-' + easyrtcid);
+        sceneEl.appendChild(audioEl);
+        // setVideoObjectSrc seems to start the media, which we can't do
+        // without risking createMediaElementSource() failing because already attached
+        audioEl.setAttribute('src', that.easyrtc.createObjectURL(stream));
+        // NOTE: panning works fine with test stream...
+        //audioEl.src = '//threejs.org/examples/sounds/376737_Skullbeatz___Bad_Cat_Maste.ogg';
+        //audioEl.crossOrigin = 'anonymous';
         var sound = positionalAudioEl.components.sound;
         sound.setupSound();
-        for (var i=0; i<sound.pool.children.length; i++) {
-          var poolSound = sound.pool.children[i];
-          poolSound.source = sound.listener.context.createMediaElementSource(audioEl);
-          poolSound.setNodeSource(poolSound.source);
-        }
+        sound.source = sound.listener.context.createMediaElementSource(audioEl);
+        sound.pool.children[0].setNodeSource(sound.source);
+        if (that.autoplayAudio) { audioEl.play(); }
       });
     });
 
