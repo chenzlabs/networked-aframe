@@ -1831,7 +1831,8 @@
 	  compressSyncPackets: false, // compress network component sync packet json
 	  useLerp: true, // when networked entities are created the aframe-lerp-component is attached to the root
 	  useShare: true, // whether for remote entities, we use networked-share (instead of networked-remote)
-	  collisionOwnership: true // whether for networked-share, we take ownership when needed upon physics collision
+	  collisionOwnership: true, // whether for networked-share, we take ownership when needed upon physics collision
+	  autoplayAudio: true // whether for remote streamed audio, we autoplay
 	};
 
 	module.exports = options;
@@ -2531,7 +2532,8 @@
 	      var streamOptions = {
 	        audio: enableAudio,
 	        video: false,
-	        datachannel: true
+	        datachannel: true,
+	        autoplayAudio: NAF.options.autoplayAudio
 	      };
 	      this.network.setStreamOptions(streamOptions);
 	      this.network.setDatachannelListeners(this.dcOpenListener.bind(this), this.dcCloseListener.bind(this), this.receiveDataChannelMessage.bind(this));
@@ -3001,6 +3003,7 @@
 	      this.easyrtc.enableAudio(options.audio);
 	      this.easyrtc.enableVideoReceive(false);
 	      this.easyrtc.enableAudioReceive(options.audio);
+	      this.autoplayAudio = options.autoplayAudio;
 	    }
 	  }, {
 	    key: 'setDatachannelListeners',
@@ -3041,13 +3044,43 @@
 	      var that = this;
 
 	      this.easyrtc.setStreamAcceptor(function (easyrtcid, stream) {
-	        var audioEl = document.createElement("audio");
-	        audioEl.setAttribute('id', 'audio-' + easyrtcid);
-	        document.body.appendChild(audioEl);
-	        that.easyrtc.setVideoObjectSrc(audioEl, stream);
+	        var sceneEl = document.querySelector('a-scene');
+	        var positionalAudioEl = sceneEl.querySelector('#sound-' + easyrtcid);
+	        if (positionalAudioEl) {
+	          console.warn('??? We already have #sound-' + easyrtcid);
+	          return;
+	        }
+	        positionalAudioEl = document.createElement('a-sound');
+	        positionalAudioEl.setAttribute('id', 'sound-' + easyrtcid);
+	        sceneEl.appendChild(positionalAudioEl);
+	        positionalAudioEl.addEventListener('loaded', function () {
+	          var audioEl = sceneEl.querySelector('#audio-' + easyrtcid);
+	          if (audioEl) {
+	            console.warn('??? We already have #audio-' + easyrtcid);
+	            return;
+	          }
+	          audioEl = document.createElement("audio");
+	          audioEl.setAttribute('id', 'audio-' + easyrtcid);
+	          sceneEl.appendChild(audioEl);
+	          // setVideoObjectSrc seems to start the media, which we can't do
+	          // without risking createMediaElementSource() failing because already attached
+	          audioEl.setAttribute('src', that.easyrtc.createObjectURL(stream));
+	          // NOTE: panning works fine with test stream...
+	          //audioEl.src = '//threejs.org/examples/sounds/376737_Skullbeatz___Bad_Cat_Maste.ogg';
+	          //audioEl.crossOrigin = 'anonymous';
+	          var sound = positionalAudioEl.components.sound;
+	          sound.setupSound();
+	          sound.source = sound.listener.context.createMediaElementSource(audioEl);
+	          sound.pool.children[0].setNodeSource(sound.source);
+	          if (that.autoplayAudio) {
+	            audioEl.play();
+	          }
+	        });
 	      });
 
 	      this.easyrtc.setOnStreamClosed(function (easyrtcid) {
+	        var positionalAudioEl = document.getElementById('sound-' + easyrtcid);
+	        positionalAudioEl.parentNode.removeChild(positionalAudioEl);
 	        var audioEl = document.getElementById('audio-' + easyrtcid);
 	        audioEl.parentNode.removeChild(audioEl);
 	      });
