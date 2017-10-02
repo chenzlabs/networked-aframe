@@ -31,7 +31,9 @@ class EasyRtcInterface extends NetworkInterface {
     this.easyrtc.enableAudio(options.audio);
     this.easyrtc.enableVideoReceive(false);
     this.easyrtc.enableAudioReceive(options.audio);
-    this.autoplayAudio = options.autoplayAudio;
+
+    this.audioStreams = {};
+    this.pendingAudioRequest = {};
   }
 
   setDatachannelListeners(openListener, closedListener, messageListener) {
@@ -64,47 +66,33 @@ class EasyRtcInterface extends NetworkInterface {
     }
   }
 
+  getAudioStream(clientId) {
+    var that = this;
+    if(this.audioStreams[clientId]) {
+      naf.log.write("Already had audio for " + clientId);
+      return Promise.resolve(this.audioStreams[clientId]);
+    } else {
+      naf.log.write("Wating on audio for " + clientId);
+      return new Promise(function(resolve) {
+        that.pendingAudioRequest[clientId] = resolve;
+      });
+    }
+  }
+
   connectWithAudio(appId, loginSuccess, loginFailure) {
     var that = this;
 
     this.easyrtc.setStreamAcceptor(function(easyrtcid, stream) {
-      var sceneEl = document.querySelector('a-scene');
-      var positionalAudioEl = sceneEl.querySelector('#sound-' + easyrtcid);
-      if (positionalAudioEl) {
-        console.warn('??? We already have #sound-' + easyrtcid);
-	return;
+      that.audioStreams[easyrtcid] = stream;
+      if(that.pendingAudioRequest[easyrtcid]) {
+        naf.log.write("got pending audio for " + easyrtcid);
+        that.pendingAudioRequest[easyrtcid](stream);
+        delete that.pendingAudioRequest[easyrtcid](stream);
       }
-      positionalAudioEl = document.createElement('a-sound');
-      positionalAudioEl.setAttribute('id', 'sound-' + easyrtcid);
-      sceneEl.appendChild(positionalAudioEl);
-      positionalAudioEl.addEventListener('loaded', function () {
-        var audioEl = sceneEl.querySelector('#audio-' + easyrtcid);
-        if (audioEl) {
-          console.warn('??? We already have #audio-' + easyrtcid);
-	  return;
-        }
-	audioEl = document.createElement("audio");
-        audioEl.setAttribute('id', 'audio-' + easyrtcid);
-        sceneEl.appendChild(audioEl);
-        // setVideoObjectSrc seems to start the media, which we can't do
-        // without risking createMediaElementSource() failing because already attached
-        audioEl.setAttribute('src', that.easyrtc.createObjectURL(stream));
-        // NOTE: panning works fine with test stream...
-        //audioEl.src = '//threejs.org/examples/sounds/376737_Skullbeatz___Bad_Cat_Maste.ogg';
-        //audioEl.crossOrigin = 'anonymous';
-        var sound = positionalAudioEl.components.sound;
-        sound.setupSound();
-        sound.source = sound.listener.context.createMediaElementSource(audioEl);
-        sound.pool.children[0].setNodeSource(sound.source);
-        if (that.autoplayAudio) { audioEl.play(); }
-      });
     });
 
     this.easyrtc.setOnStreamClosed(function (easyrtcid) {
-      var positionalAudioEl = document.getElementById('sound-' + easyrtcid);
-      positionalAudioEl.parentNode.removeChild(positionalAudioEl);
-      var audioEl = document.getElementById('audio-' + easyrtcid);
-      audioEl.parentNode.removeChild(audioEl);
+      delete that.audioStreams[easyrtcid];
     });
 
     this.easyrtc.initMediaSource(

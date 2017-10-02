@@ -11,3 +11,4 @@ require('./components/networked');
 require('./components/networked-remote');
 require('./components/networked-share');
 require('./components/networked-adhoc');
+require('./components/networked-audio-source');

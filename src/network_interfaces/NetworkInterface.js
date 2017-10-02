@@ -24,6 +24,7 @@ class NetworkInterface extends NafInterface {
   sendData(networkId, dataType, data) {this.notImplemented()}
   sendDataGuaranteed(networkId, dataType, data) {this.notImplemented()}
   getConnectStatus(networkId) {this.notImplemented()}
+  getAudioStream(networkId) {return Promise.reject("Interface method not implemented: getAudioStream")}
 }
 
 NetworkInterface.IS_CONNECTED = 'IS_CONNECTED';
