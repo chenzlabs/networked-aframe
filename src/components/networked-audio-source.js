@@ -52,6 +52,19 @@ AFRAME.registerComponent('networked-audio-source', {
       sceneEl.addEventListener('camera-set-active', function (evt) {
         evt.detail.cameraEl.getObject3D('camera').add(sceneEl.audioListener);
       });
+      // for mobile Chrome (and perhaps others), resume audio on user gesture
+      window.addEventListener('touchstart', function() {
+        console.log('touchstart, ' + sceneEl.audioListener.context.state);
+        sceneEl.audioListener.context.resume();
+      });
+      window.addEventListener('touchend', function() {
+        console.log('touchend, ' + sceneEl.audioListener.context.state);
+        sceneEl.audioListener.context.resume();
+      });
+      window.addEventListener('click', function() {
+        console.log('click, ' + sceneEl.audioListener.context.state);
+        sceneEl.audioListener.context.resume();
+      });
     }
     this.listener = sceneEl.audioListener;
 
