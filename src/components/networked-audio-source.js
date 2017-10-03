@@ -21,6 +21,7 @@ AFRAME.registerComponent('networked-audio-source', {
       if(this.stream) {
         this.sound.disconnect();
       }
+      this.audioEl.srcObject = newStream;
       if(newStream) {
         var source = this.listener.context.createMediaStreamSource(newStream);
         this.sound.setNodeSource(source);
@@ -52,6 +53,10 @@ AFRAME.registerComponent('networked-audio-source', {
       sceneEl.addEventListener('camera-set-active', function (evt) {
         evt.detail.cameraEl.getObject3D('camera').add(sceneEl.audioListener);
       });
+
+      this.audioEl = document.createElement('audio');
+      sceneEl.appendChild(this.audioEl);
+      
       // for mobile Chrome (and perhaps others), resume audio on user gesture
       window.addEventListener('touchstart', function() {
         console.log('touchstart, ' + sceneEl.audioListener.context.state);
