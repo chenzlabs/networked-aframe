@@ -69,10 +69,10 @@ class EasyRtcInterface extends NetworkInterface {
   getAudioStream(clientId) {
     var that = this;
     if(this.audioStreams[clientId]) {
-      naf.log.write("Already had audio for " + clientId);
+      naf.log.write("getAudioStream: Already had audio for " + clientId);
       return Promise.resolve(this.audioStreams[clientId]);
     } else {
-      naf.log.write("Wating on audio for " + clientId);
+      naf.log.write("getAudioStream: Wating on audio for " + clientId);
       return new Promise(function(resolve) {
         that.pendingAudioRequest[clientId] = resolve;
       });

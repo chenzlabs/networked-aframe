@@ -89,6 +89,7 @@ AFRAME.registerComponent('networked-share', {
     var audioSource = this.el.querySelector("[networked-audio-source]");
     if (!audioSource) return;
 
+    NAF.log.write('connectAudioSource: getAudioStream ' + this.data.owner);
     naf.connection.network.getAudioStream(this.data.owner)
       .then(audioSource.components['networked-audio-source'].setMediaStream);
   },
