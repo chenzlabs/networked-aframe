@@ -63,11 +63,11 @@ class FirebaseWebRtcInterface extends NetworkInterface {
 
   connect(appId) {
     var self = this;
-    var firebase = this.firebase;
 
     this.appId = appId;
 
     this.initFirebase(function(id) {
+      var firebase = self.app; //this.firebase;
       self.id = id;
 
       // Note: assuming that data transfer via firebase realtime database
@@ -160,7 +160,7 @@ class FirebaseWebRtcInterface extends NetworkInterface {
 
   sendDataGuaranteed(networkId, dataType, data) {
     if (data.takeover === undefined) { data.takeover = null; }
-    this.firebase.database().ref(this.getDataPath(this.id)).set({
+    this.app/*firebase*/.database().ref(this.getDataPath(this.id)).set({
       to: networkId,
       type: dataType,
       data: data
@@ -198,11 +198,11 @@ class FirebaseWebRtcInterface extends NetworkInterface {
    */
 
   initFirebase(callback) {
-    this.firebase.initializeApp({
+    this.app = this.firebase.initializeApp({
       apiKey: this.apiKey,
       authDomain: this.authDomain,
       databaseURL: this.databaseURL
-    });
+    }, this.appId);
 
     this.auth(this.authType, callback);
   }
@@ -236,7 +236,7 @@ class FirebaseWebRtcInterface extends NetworkInterface {
 
   authAnonymous(callback) {
     var self = this;
-    var firebase = this.firebase;
+    var firebase = this.app; //firebase;
 
     firebase.auth().signInAnonymously().catch(function (error) {
       console.error('FirebaseWebRtcInterface.authAnonymous: ' + error);
@@ -304,7 +304,7 @@ class FirebaseWebRtcInterface extends NetworkInterface {
   }
 
   getTimestamp(callback) {
-    var firebase = this.firebase;
+    var firebase = this.app/*firebase*/;
     var ref = firebase.database().ref(this.getTimestampGenerationPath(this.id));
     ref.set(firebase.database.ServerValue.TIMESTAMP);
     ref.once('value', function (data) {
