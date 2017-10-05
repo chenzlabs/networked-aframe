@@ -59,6 +59,7 @@
 	__webpack_require__(66);
 	__webpack_require__(67);
 	__webpack_require__(68);
+	__webpack_require__(69);
 
 /***/ }),
 /* 1 */
@@ -228,19 +229,6 @@
 	}
 
 	function fetchTemplateFromXHR(src, type) {
-	  if (src.indexOf('data:') === 0) {
-	    // Handle inline data URI.
-	    var split = src.split(',', 2);
-	    var inlineData = src.substring(split[1]);
-	    var uriType = split[0].substring(5);
-	    var isBase64 = uriType.endsWith(';base64');
-	    if (isBase64) {
-	      uriType = uriType.substring(0, uriType.length - 7);
-	    }
-	    var blob = new Blob(isBase64 ? window.atob(inlineData) : decodeURIComponent(inlineData), uriType);
-	    src = URL.createObjectURL(blob);
-	  }
-
 	  return new Promise(function (resolve) {
 	    var request;
 	    request = new XMLHttpRequest();
@@ -1831,7 +1819,8 @@
 	  compressSyncPackets: false, // compress network component sync packet json
 	  useLerp: true, // when networked entities are created the aframe-lerp-component is attached to the root
 	  useShare: true, // whether for remote entities, we use networked-share (instead of networked-remote)
-	  collisionOwnership: true // whether for networked-share, we take ownership when needed upon physics collision
+	  collisionOwnership: true, // whether for networked-share, we take ownership when needed upon physics collision
+	  autoplayAudio: true // whether for remote streamed audio, we autoplay
 	};
 
 	module.exports = options;
@@ -1900,13 +1889,21 @@
 
 	module.exports.delimiter = '---';
 
+	function sanitizeKey(key) {
+	  return key.replace(/\./g, '!').replace(/\#/g, '@').replace(/\[/g, '{').replace(/\]/g, '}');
+	}
+
+	function desanitizeKey(key) {
+	  return key.replace(/\!/g, '.').replace(/\@/g, '#').replace(/\{/g, '[').replace(/\}/g, ']');
+	}
+
 	module.exports.childSchemaToKey = function (schema) {
-	  return (schema.selector || '') + module.exports.delimiter + schema.component + module.exports.delimiter + (schema.property || '');
+	  return sanitizeKey(schema.selector || '') + module.exports.delimiter + schema.component + module.exports.delimiter + (schema.property || '');
 	};
 
 	module.exports.keyToChildSchema = function (key) {
 	  var splitKey = key.split(module.exports.delimiter, 3);
-	  return { selector: splitKey[0] || undefined, component: splitKey[1], property: splitKey[2] || undefined };
+	  return { selector: desanitizeKey(splitKey[0]) || undefined, component: splitKey[1], property: splitKey[2] || undefined };
 	};
 
 	module.exports.isChildSchemaKey = function (key) {
@@ -2531,7 +2528,8 @@
 	      var streamOptions = {
 	        audio: enableAudio,
 	        video: false,
-	        datachannel: true
+	        datachannel: true,
+	        autoplayAudio: NAF.options.autoplayAudio
 	      };
 	      this.network.setStreamOptions(streamOptions);
 	      this.network.setDatachannelListeners(this.dcOpenListener.bind(this), this.dcCloseListener.bind(this), this.receiveDataChannelMessage.bind(this));
@@ -2794,6 +2792,11 @@
 	    value: function getConnectStatus(networkId) {
 	      this.notImplemented();
 	    }
+	  }, {
+	    key: 'getAudioStream',
+	    value: function getAudioStream(networkId) {
+	      return Promise.reject("Interface method not implemented: getAudioStream");
+	    }
 	  }]);
 
 	  return NetworkInterface;
@@ -3001,6 +3004,9 @@
 	      this.easyrtc.enableAudio(options.audio);
 	      this.easyrtc.enableVideoReceive(false);
 	      this.easyrtc.enableAudioReceive(options.audio);
+
+	      this.audioStreams = {};
+	      this.pendingAudioRequest = {};
 	    }
 	  }, {
 	    key: 'setDatachannelListeners',
@@ -3036,20 +3042,35 @@
 	      }
 	    }
 	  }, {
+	    key: 'getAudioStream',
+	    value: function getAudioStream(clientId) {
+	      var that = this;
+	      if (this.audioStreams[clientId]) {
+	        naf.log.write("getAudioStream: Already had audio for " + clientId);
+	        return Promise.resolve(this.audioStreams[clientId]);
+	      } else {
+	        naf.log.write("getAudioStream: Wating on audio for " + clientId);
+	        return new Promise(function (resolve) {
+	          that.pendingAudioRequest[clientId] = resolve;
+	        });
+	      }
+	    }
+	  }, {
 	    key: 'connectWithAudio',
 	    value: function connectWithAudio(appId, loginSuccess, loginFailure) {
 	      var that = this;
 
 	      this.easyrtc.setStreamAcceptor(function (easyrtcid, stream) {
-	        var audioEl = document.createElement("audio");
-	        audioEl.setAttribute('id', 'audio-' + easyrtcid);
-	        document.body.appendChild(audioEl);
-	        that.easyrtc.setVideoObjectSrc(audioEl, stream);
+	        that.audioStreams[easyrtcid] = stream;
+	        if (that.pendingAudioRequest[easyrtcid]) {
+	          naf.log.write("got pending audio for " + easyrtcid);
+	          that.pendingAudioRequest[easyrtcid](stream);
+	          delete that.pendingAudioRequest[easyrtcid](stream);
+	        }
 	      });
 
 	      this.easyrtc.setOnStreamClosed(function (easyrtcid) {
-	        var audioEl = document.getElementById('audio-' + easyrtcid);
-	        audioEl.parentNode.removeChild(audioEl);
+	        delete that.audioStreams[easyrtcid];
 	      });
 
 	      this.easyrtc.initMediaSource(function () {
@@ -3347,11 +3368,11 @@
 	    key: 'connect',
 	    value: function connect(appId) {
 	      var self = this;
-	      var firebase = this.firebase;
 
 	      this.appId = appId;
 
 	      this.initFirebase(function (id) {
+	        var firebase = self.app; //this.firebase;
 	        self.id = id;
 
 	        // Note: assuming that data transfer via firebase realtime database
@@ -3449,7 +3470,7 @@
 	      if (data.takeover === undefined) {
 	        data.takeover = null;
 	      }
-	      this.firebase.database().ref(this.getDataPath(this.id)).set({
+	      this.app /*firebase*/.database().ref(this.getDataPath(this.id)).set({
 	        to: networkId,
 	        type: dataType,
 	        data: data
@@ -3492,11 +3513,11 @@
 	  }, {
 	    key: 'initFirebase',
 	    value: function initFirebase(callback) {
-	      this.firebase.initializeApp({
+	      this.app = this.firebase.initializeApp({
 	        apiKey: this.apiKey,
 	        authDomain: this.authDomain,
 	        databaseURL: this.databaseURL
-	      });
+	      }, this.appId);
 
 	      this.auth(this.authType, callback);
 	    }
@@ -3533,7 +3554,7 @@
 	    key: 'authAnonymous',
 	    value: function authAnonymous(callback) {
 	      var self = this;
-	      var firebase = this.firebase;
+	      var firebase = this.app; //firebase;
 
 	      firebase.auth().signInAnonymously().catch(function (error) {
 	        console.error('FirebaseWebRtcInterface.authAnonymous: ' + error);
@@ -3611,9 +3632,9 @@
 	  }, {
 	    key: 'getTimestamp',
 	    value: function getTimestamp(callback) {
-	      var firebase = this.firebase;
+	      var firebase = this.app /*firebase*/;
 	      var ref = firebase.database().ref(this.getTimestampGenerationPath(this.id));
-	      ref.set(firebase.database.ServerValue.TIMESTAMP);
+	      ref.set(this.firebase.database.ServerValue.TIMESTAMP);
 	      ref.once('value', function (data) {
 	        var timestamp = data.val();
 	        ref.remove();
@@ -4611,6 +4632,14 @@
 	    }
 	  },
 
+	  connectAudioSource: function connectAudioSource() {
+	    var audioSource = this.el.querySelector("[networked-audio-source]");
+	    if (!audioSource) return;
+
+	    NAF.log.write('connectAudioSource: getAudioStream ' + this.data.owner);
+	    naf.connection.network.getAudioStream(this.data.owner).then(audioSource.components['networked-audio-source'].setMediaStream);
+	  },
+
 	  registerEntity: function registerEntity(networkId) {
 	    naf.entities.registerLocalEntity(networkId, this.el);
 	    NAF.log.write('Networked-Share registered: ', networkId);
@@ -4651,6 +4680,7 @@
 	    var callback = function callback() {
 	      var entityData = that.el.firstUpdateData;
 	      that.networkUpdate(entityData);
+	      that.connectAudioSource(); // @TODO this is probably a better place to be doing this
 	    };
 
 	    // wait for template to render (and monkey-patching to finish, so next tick), then callback
@@ -5222,7 +5252,8 @@
 	  var n = el.cloneNode(true); // make a copy
 	  ['id', 'camera', 'look-controls', 'wasd-controls',
 	  // 'position', 'rotation',
-	  'networked', 'networked-share', 'networked-remote', 'networked-adhoc', 'dynamic-body', // 'static-body',
+	  'networked', 'networked-share', 'networked-remote', 'networked-adhoc',
+	  // 'dynamic-body', 'static-body',
 	  'quaternion', 'velocity'].forEach(function (name) {
 	    n.removeAttribute(name);
 	  });
@@ -5241,6 +5272,79 @@
 
 	  return el;
 	}
+
+/***/ }),
+/* 69 */
+/***/ (function(module, exports, __webpack_require__) {
+
+	'use strict';
+
+	var naf = __webpack_require__(47);
+
+	AFRAME.registerComponent('networked-audio-source', {
+	  schema: {
+	    positional: { default: true }
+	  },
+
+	  init: function init() {
+	    this.listener = null;
+	    this.stream = null;
+
+	    this.setMediaStream = this.setMediaStream.bind(this);
+	  },
+
+	  setMediaStream: function setMediaStream(newStream) {
+	    if (!this.sound) {
+	      this.setupSound();
+	    }
+
+	    if (newStream != this.stream) {
+	      if (this.stream) {
+	        this.sound.disconnect();
+	      }
+	      this.audioEl.srcObject = newStream;
+	      if (newStream) {
+	        var source = this.listener.context.createMediaStreamSource(newStream);
+	        this.sound.setNodeSource(source);
+	      }
+	      this.stream = newStream;
+	    }
+	  },
+
+
+	  remove: function remove() {
+	    if (!this.sound) return;
+
+	    this.el.removeObject3D(this.attrName);
+	    if (this.stream) {
+	      this.sound.disconnect();
+	    }
+	  },
+
+	  setupSound: function setupSound() {
+	    var el = this.el;
+	    var sceneEl = el.sceneEl;
+
+	    if (this.sound) {
+	      el.removeObject3D('sound');
+	    }
+
+	    if (!sceneEl.audioListener) {
+	      sceneEl.audioListener = new THREE.AudioListener();
+	      sceneEl.camera && sceneEl.camera.add(sceneEl.audioListener);
+	      sceneEl.addEventListener('camera-set-active', function (evt) {
+	        evt.detail.cameraEl.getObject3D('camera').add(sceneEl.audioListener);
+	      });
+	    }
+	    this.listener = sceneEl.audioListener;
+
+	    this.audioEl = document.createElement('audio');
+	    sceneEl.appendChild(this.audioEl);
+	    this.sound = this.data.positional ? new THREE.PositionalAudio(this.listener) : new THREE.Audio(this.listener);
+	    el.setObject3D(this.attrName, this.sound);
+	  }
+
+	});
 
 /***/ })
 /******/ ]);
