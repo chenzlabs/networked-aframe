@@ -20,7 +20,7 @@ function addNetEntityFromElement(el, networkId, data) {
     'camera', 'look-controls', 'wasd-controls',
     // 'position', 'rotation',
     'networked', 'networked-share', 'networked-remote', 'networked-adhoc',
-    'dynamic-body', // 'static-body',
+    // 'dynamic-body', 'static-body',
     'quaternion', 'velocity',
   ].forEach(function (name) { n.removeAttribute(name); });
 
