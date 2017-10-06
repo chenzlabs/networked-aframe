@@ -14691,6 +14691,28 @@
 
 	var naf = __webpack_require__(47);
 
+	AFRAME.registerSystem('networked-adhoc', {
+	  // TODO: move to system
+	  init: function init() {
+	    var scene = this.el;
+	    if (scene.schemaListener) {
+	      return;
+	    }
+	    scene.schemaListener = true;
+
+	    NAF.connection.subscribeToDataChannel('schema', function (fromClient, dataType, data) {
+	      var templateEl = document.createElement('script');
+	      templateEl.innerHTML = data.templateHTML;
+	      templateEl.setAttribute('type', 'text/html');
+	      templateEl.setAttribute('id', data.templateName);
+	      scene.appendChild(templateEl);
+	      NAF.schemas.add({
+	        template: '#' + data.templateName,
+	        components: data.components });
+	    });
+	  }
+	});
+
 	AFRAME.registerComponent('networked-adhoc', {
 	  schema: {
 	    networkId: { default: '' },
@@ -14718,12 +14740,20 @@
 	    n.removeAttribute(name);
 	  });
 
-	  var template = NAF.options.compressSyncPackets ? 'data:text/html;charset=utf-8;base64,' + btoa(n.outerHTML) : 'data:text/html;charset=utf-8,' + encodeURIComponent(n.outerHTML);
+	  // with the new 0.3.x code, 
+	  // inline template won't work, since then one can't specify components;
+	  // move to strategy of broadcasting schema for specific network entity?
+	  var templateName = 'template-' + networkId;
+	  NAF.connection.broadcastDataGuaranteed('schema', {
+	    networkId: networkId,
+	    templateName: templateName,
+	    templateHTML: n.outerHTML,
+	    components: data.components
+	  });
 
 	  //el.setAttribute('id', 'naf-' + networkId);
 	  el.setAttribute('networked', {
-	    template: template,
-	    components: data.components, // FIXME: how to do this now?
+	    template: '#' + templateName,
 	    showLocalTemplate: false,
 	    networkId: networkId
 	    // this is default now... owner: NAF.clientId // we own it to start
